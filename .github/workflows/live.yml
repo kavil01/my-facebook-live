@@ -16,17 +16,10 @@ jobs:
         run: |
           sudo timedatectl set-timezone Asia/Colombo
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Stream Tools & Puppeteer
+      - name: Install Stream Tools & Chromium
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg xvfb libgbm-dev
-          npm init -y
-          npm install puppeteer puppeteer-extra puppeteer-extra-plugin-stealth --unsafe-perm=true
+          sudo apt-get install -y ffmpeg xvfb chromium-browser
 
       - name: Start Live Stream
         env:
@@ -37,45 +30,26 @@ jobs:
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Advanced Bot Bypass Puppeteer Script
-          node -e '
-          const puppeteer = require("puppeteer-extra");
-          const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-          puppeteer.use(StealthPlugin());
+          # 2. Chrome Automation Detection-ஐ முற்றிலும் தவிர்க்கும் பிரவுசர் கட்டளை
+          chromium-browser \
+            --no-sandbox \
+            --disable-setuid-sandbox \
+            --disable-blink-features=AutomationControlled \
+            --disable-infobars \
+            --excludeSwitches="enable-automation" \
+            --useAutomationExtension=false \
+            --kiosk \
+            --window-size=1280,720 \
+            --window-position=0,0 \
+            "https://newtamiil.blogspot.com/" &
 
-          (async () => {
-            const browser = await puppeteer.launch({
-              headless: false,
-              executablePath: "/usr/bin/google-chrome",
-              args: [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-blink-features=AutomationControlled",
-                "--disable-web-security",
-                "--allow-running-insecure-content",
-                "--autoplay-policy=no-user-gesture-required",
-                "--window-size=1280,720"
-              ]
-            });
+          # வலைத்தளம் லோட் ஆக காத்திருத்தல்
+          sleep 20
 
-            const page = await browser.newPage();
-            
-            // Custom Headers to bypass Bot Detection
-            await page.setExtraHTTPHeaders({
-              "accept-language": "en-US,en;q=0.9,ta;q=0.8"
-            });
-            
-            await page.setViewport({ width: 1280, height: 720 });
-            await page.goto("https://newtamiil.blogspot.com/", { waitUntil: "networkidle2", timeout: 90000 });
-          })();
-          ' &
-
-          sleep 25
-
-          # 3. Stream to Facebook Live (உங்களின் தற்போதைய Crop Alignment-க்கு ஏற்றவாறு)
+          # 3. துல்லியமாக Player பகுதி மட்டும் வெட்டப்பட்டு ஸ்ட்ரீம் செய்யப்படும்
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
-          -vf "crop=1100:620:90:50,scale=1280:720" \
+          -vf "crop=1020:600:130:60,scale=1280:720" \
           -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
           -c:a aac -b:a 128k \
           -f flv "rtmps://live-api-s.facebook.com:443/rtmp/${FB_KEY}"
