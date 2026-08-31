@@ -1,0 +1,52 @@
+name: Website 24/7 Facebook Live
+
+on:
+  schedule:
+    - cron: '0 */5 * * *'
+  workflow_dispatch:
+
+jobs:
+  stream-website:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Node.js & Dependencies
+        run: |
+          npm init -y
+          npm install puppeteer
+
+      - name: Install FFmpeg & Chrome Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg xvfb libgbm-dev
+
+      - name: Start Live Stream
+        env:
+          FB_KEY: ${{ secrets.FB_STREAM_KEY }}
+        run: |
+          Xvfb :99 -screen 0 1280x720x24 &
+          export DISPLAY=:99
+
+          node -e '
+          const puppeteer = require("puppeteer");
+          (async () => {
+            const browser = await puppeteer.launch({
+              headless: false,
+              args: ["--no-sandbox", "--disable-setuid-sandbox", "--window-size=1280,720"]
+            });
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1280, height: 720 });
+            await page.goto("https://newtamiil.blogspot.com/", { waitUntil: "networkidle2" });
+            console.log("Website Loaded Successfully!");
+          })();
+          ' &
+
+          sleep 10
+
+          ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
+          -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
+          -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
+          -c:a aac -b:a 128k \
+          -f flv "rtmps://live-api-s.facebook.com:443/rtmp/${FB_KEY}"
