@@ -12,40 +12,47 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Stream Tools & Dependencies
+      - name: Install Stream Tools & Utilities
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg xvfb chromium-browser xdotool python3-pip
-          pip3 install yt-dlp
+          sudo apt-get install -y ffmpeg xvfb chromium-browser xdotool
 
       - name: Start Live Stream
         env:
           FB_KEY: ${{ secrets.FB_STREAM_KEY }}
         run: |
-          # 1. Virtual Screen அமைத்தல்
+          # 1. Virtual Screen தொடங்குதல் (1280x720)
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Chromium-ஐ Flags உடன் இயக்குதல் (Bypass Detection)
+          # 2. Chromium பிரவுசரை திறத்தல்
           chromium-browser \
             --no-sandbox \
             --disable-setuid-sandbox \
-            --disable-dev-shm-usage \
-            --disable-accelerated-2d-canvas \
-            --disable-gpu \
-            --disable-blink-features=AutomationControlled \
-            --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
+            --no-first-run \
+            --no-default-browser-check \
+            --disable-fre \
             --window-size=1280,720 \
+            --window-position=0,0 \
             --start-fullscreen \
             "https://newtamiil.blogspot.com/" &
 
-          # பிரவுசர் லோட் ஆக 30 வினாடிகள் காத்திருத்தல்
-          sleep 30
+          sleep 6
 
-          # 3. FFmpeg Crop மற்றும் Facebook Live ஸ்ட்ரீமிங்
+          # 3. பாப்-அப் திரையைத் தாண்டி 'Accept' கொடுக்க Enter விசை அழுத்துதல்
+          xdotool key Return
+          sleep 2
+          xdotool key Return
+          sleep 2
+          xdotool key space
+
+          # இணையதளம் மற்றும் Player லோட் ஆக காத்திருத்தல்
+          sleep 20
+
+          # 4. FFmpeg: Player பகுதி மட்டும் சரியாக வெட்டப்பட்டு Full Screen-ஆக Facebook Live அனுப்பப்படும்
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
-          -vf "crop=850:480:215:150,scale=1280:720" \
+          -vf "crop=1000:580:140:90,scale=1280:720" \
           -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
           -c:a aac -b:a 128k \
           -f flv "rtmps://live-api-s.facebook.com:443/rtmp/${FB_KEY}"
