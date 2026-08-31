@@ -10,17 +10,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Install Node.js & Dependencies
-        run: |
-          npm init -y
-          npm install puppeteer puppeteer-extra puppeteer-extra-plugin-stealth
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Install FFmpeg & Chrome Dependencies
+      - name: Install Puppeteer & FFmpeg
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg xvfb libgbm-dev
+          npm init -y
+          npm install puppeteer --unsafe-perm=true
 
       - name: Start Live Stream
         env:
@@ -29,27 +31,26 @@ jobs:
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # YouTube Bot Check-ஐத் தவிர்க்க Stealth Plugin உடன் Web Page திறக்கிறது
           node -e '
-          const puppeteer = require("puppeteer-extra");
-          const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-          puppeteer.use(StealthPlugin());
-
+          const puppeteer = require("puppeteer");
           (async () => {
             const browser = await puppeteer.launch({
               headless: false,
-              args: ["--no-sandbox", "--disable-setuid-sandbox", "--window-size=1280,720"]
+              args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--window-size=1280,720",
+                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+              ]
             });
             const page = await browser.newPage();
-            await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             await page.setViewport({ width: 1280, height: 720 });
-            await page.goto("https://newtamiil.blogspot.com/", { waitUntil: "networkidle2" });
+            await page.goto("https://newtamiil.blogspot.com/", { waitUntil: "networkidle2", timeout: 60000 });
           })();
           ' &
 
           sleep 15
 
-          # FFmpeg Crop: Video Player பகுதியை மட்டும் வெட்டி Full Screen-ஆக Facebook Live அனுப்பும்
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -vf "crop=1020:600:130:90,scale=1280:720" \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
