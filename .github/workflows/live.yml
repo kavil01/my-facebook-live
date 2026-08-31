@@ -1,7 +1,52 @@
-# ==================================================
-      # 4. Create browser control script
-      # ==================================================
-      - name: Create TV browser controller
+name: KING Tamil TV - Facebook Live
+
+on:
+  workflow_dispatch:
+
+jobs:
+  tv-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    env:
+      TV_URL: "https://newtamiil.blogspot.com/?m=1"
+      DISPLAY: ":99"
+
+    steps:
+      - name: Install Chrome, FFmpeg and X11
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            chromium \
+            ffmpeg \
+            xvfb \
+            x11-utils \
+            pulseaudio \
+            pulseaudio-utils \
+            curl \
+            jq
+          chromium --version
+          ffmpeg -version | head -1
+
+      - name: Start virtual display
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 -ac +extension RANDR > /tmp/xvfb.log 2>&1 &
+          echo $! > /tmp/xvfb.pid
+          sleep 3
+          export DISPLAY=:99
+          xdpyinfo -display :99 | grep dimensions
+
+      - name: Start audio system
+        run: |
+          export DISPLAY=:99
+          pulseaudio --start --exit-idle-time=-1 --daemonize=true
+          sleep 3
+          pactl load-module module-null-sink sink_name=TVSink sink_properties=device.description=TVSink || true
+          pactl set-default-sink TVSink
+          echo "Audio system ready."
+          pactl list short sinks
+
+      - name: Create TV browser controller & Install Playwright
         run: |
           cd /tmp
           cat > tv-browser.js <<'EOF'
@@ -134,9 +179,6 @@
           npm init -y
           npm install playwright
 
-      # ==================================================
-      # 5. Start TV browser
-      # ==================================================
       - name: Start TV
         env:
           DISPLAY: ":99"
@@ -148,3 +190,82 @@
           echo "Waiting for TV..."
           sleep 20
           cat /tmp/tv-browser.log || true
+
+      - name: Check TV screen
+        run: |
+          echo "=============================="
+          echo "DISPLAY"
+          echo "=============================="
+          xdpyinfo -display :99 | grep dimensions || true
+
+          echo "=============================="
+          echo "CHROMIUM"
+          echo "=============================="
+          ps aux | grep chromium | grep -v grep || true
+
+          echo "=============================="
+          echo "TV BROWSER LOG"
+          echo "=============================="
+          cat /tmp/tv-browser.log || true
+
+      - name: Start Facebook Live
+        env:
+          FACEBOOK_RTMP_URL: ${{ secrets.FACEBOOK_RTMP_URL }}
+          FACEBOOK_STREAM_KEY: ${{ secrets.FACEBOOK_STREAM_KEY }}
+          DISPLAY: ":99"
+        run: |
+          if [ -z "$FACEBOOK_RTMP_URL" ]; then
+            echo "ERROR: FACEBOOK_RTMP_URL secret missing."
+            exit 1
+          fi
+
+          if [ -z "$FACEBOOK_STREAM_KEY" ]; then
+            echo "ERROR: FACEBOOK_STREAM_KEY secret missing."
+            exit 1
+          fi
+
+          echo "================================"
+          echo "KING TAMIL TV"
+          echo "Facebook Live starting..."
+          echo "================================"
+
+          ffmpeg \
+            -hide_banner \
+            -loglevel info \
+            -f x11grab \
+            -draw_mouse 0 \
+            -video_size 1920x1080 \
+            -framerate 30 \
+            -i :99.0 \
+            -f pulse \
+            -i default \
+            -vf "format=yuv420p" \
+            -c:v libx264 \
+            -preset veryfast \
+            -tune zerolatency \
+            -pix_fmt yuv420p \
+            -r 30 \
+            -g 60 \
+            -keyint_min 60 \
+            -sc_threshold 0 \
+            -b:v 4500k \
+            -maxrate 4500k \
+            -bufsize 9000k \
+            -c:a aac \
+            -b:a 128k \
+            -ar 44100 \
+            -ac 2 \
+            -f flv \
+            "${FACEBOOK_RTMP_URL}${FACEBOOK_STREAM_KEY}"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "Cleaning up..."
+          pkill ffmpeg || true
+          pkill chromium || true
+          pkill node || true
+          if [ -f /tmp/xvfb.pid ]; then
+              kill "$(cat /tmp/xvfb.pid)" 2>/dev/null || true
+          fi
+          echo "Cleanup completed."
