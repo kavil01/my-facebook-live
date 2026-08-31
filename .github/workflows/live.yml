@@ -12,57 +12,42 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Set Timezone to Sri Lanka
+        run: |
+          sudo timedatectl set-timezone Asia/Colombo
 
-      - name: Install Dependencies & Stream Tools
+      - name: Install Stream Tools & Chromium
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg xvfb libgbm-dev
-          npm init -y
-          npm install puppeteer puppeteer-extra puppeteer-extra-plugin-stealth --unsafe-perm=true
+          sudo apt-get install -y ffmpeg xvfb chromium-browser
 
       - name: Start Live Stream
         env:
           FB_KEY: ${{ secrets.FB_STREAM_KEY }}
+          TZ: "Asia/Colombo"
         run: |
           # 1. Virtual Screen (1280x720)
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Puppeteer Stealth Mode மூலம் Blogspot தளத்தை reCAPTCHA இன்றி திறத்தல்
-          node -e '
-          const puppeteer = require("puppeteer-extra");
-          const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-          puppeteer.use(StealthPlugin());
-
-          (async () => {
-            const browser = await puppeteer.launch({
-              headless: false,
-              args: [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-blink-features=AutomationControlled",
-                "--kiosk",
-                "--window-size=1280,720"
-              ]
-            });
-            const page = await browser.newPage();
-            await page.setViewport({ width: 1280, height: 720 });
-            await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
-            await page.goto("https://newtamiil.blogspot.com/", { waitUntil: "networkidle2", timeout: 90000 });
-          })();
-          ' &
+          # 2. Chromium-ஐ முழு திரையில் (Kiosk Mode) மற்றும் Bot Detection தடுத்து திறத்தல்
+          chromium-browser \
+            --no-sandbox \
+            --disable-setuid-sandbox \
+            --kiosk \
+            --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" \
+            --disable-blink-features=AutomationControlled \
+            --window-size=1280,720 \
+            --window-position=0,0 \
+            "https://newtamiil.blogspot.com/" &
 
           # வலைத்தளம் லோட் ஆக காத்திருத்தல்
-          sleep 25
+          sleep 20
 
-          # 3. FFmpeg Crop: மஞ்சள் நிறக் கோட்டு பிளேயர் பகுதி மட்டும் சரியாக வெட்டப்பட்டு 1280x720-க்கு Zoom செய்யப்படும்
+          # 3. Kiosk Mode-க்கு ஏற்ப துல்லியமாக Player பகுதி மட்டும் வெட்டப்பட்டு Stream செய்யப்படும்
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
-          -vf "crop=1020:600:130:60,scale=1280:720" \
+          -vf "crop=1100:620:90:50,scale=1280:720" \
           -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
           -c:a aac -b:a 128k \
           -f flv "rtmps://live-api-s.facebook.com:443/rtmp/${FB_KEY}"
