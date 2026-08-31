@@ -21,33 +21,36 @@ jobs:
         env:
           FB_KEY: ${{ secrets.FB_STREAM_KEY }}
         run: |
-          # 1. Virtual Screen தொடங்குதல்
-          Xvfb :99 -screen 0 1280x720x24 &
+          # 1. Virtual Screen அமைத்தல்
+          Xvfb :99 -screen 0 1920x1080x24 &
           export DISPLAY=:99
 
-          # 2. Chromium பிரவுசரை திறத்தல்
+          # 2. Chromium பிரவுசரைத் திறத்தல்
           chromium-browser \
             --no-sandbox \
             --disable-setuid-sandbox \
             --no-first-run \
             --no-default-browser-check \
-            --disable-fre \
-            --start-maximized \
+            --disable-blink-features=AutomationControlled \
+            --disable-infobars \
+            --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" \
+            --window-size=1920,1080 \
+            --start-fullscreen \
             "https://newtamiil.blogspot.com/" &
 
           sleep 5
 
-          # 3. Pop-up வந்திருந்தால் அதைத் தானாக கிளிக் செய்து மூடுதல்
+          # Pop-up ஏதேனும் வந்தால் நீக்குதல்
           xdotool key Return
           sleep 2
           xdotool key Return
 
-          sleep 15
+          sleep 20
 
-          # 4. FFmpeg Crop மற்றும் Live Stream
-          ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
+          # 3. FFmpeg Crop: சிவப்புக் கோட்டுப் பிளேயர் பகுதி மட்டும் துல்லியமாக Crop செய்யப்படும்
+          ffmpeg -f x11grab -r 30 -s 1920x1080 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
-          -vf "crop=1020:600:130:90,scale=1280:720" \
+          -vf "crop=1150:660:385:210,scale=1280:720" \
           -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
           -c:a aac -b:a 128k \
           -f flv "rtmps://live-api-s.facebook.com:443/rtmp/${FB_KEY}"
