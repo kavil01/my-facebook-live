@@ -20,20 +20,20 @@ jobs:
       - name: Install Dependencies & Stream Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg xvfb libgbm-dev
+          sudo apt-get install -y ffmpeg xvfb libgbm-dev http-server
           npm init -y
           npm install puppeteer puppeteer-extra puppeteer-extra-plugin-stealth --unsafe-perm=true
 
       - name: Create Player HTML Page
         run: |
-          cat << 'EOF' > player.html
+          cat << 'EOF' > index.html
           <!DOCTYPE html>
           <html lang="ta">
           <head>
             <meta charset="UTF-8">
             <style>
               * { box-sizing: border-box; margin: 0; padding: 0; }
-              body { background: #000; color: #fff; font-family: Arial, sans-serif; overflow: hidden; }
+              body { background: #000; color: #fff; font-family: Arial, sans-serif; overflow: hidden; width: 1280px; height: 720px; }
               .tv-container { position: relative; width: 1280px; height: 720px; background: #000; }
               .video-screen { position: absolute; top: 0; left: 0; width: 100%; height: 675px; }
               .video-screen iframe { width: 100%; height: 100%; border: none; }
@@ -52,8 +52,7 @@ jobs:
               <div class="live-tag">● LIVE TV</div>
               <div class="channel-logo">KING TAMIL TV</div>
               <div class="video-screen">
-                <!-- இங்கு உங்கள் Youtube/Live Stream URL-ஐ மாற்றிக்கொள்ளலாம் -->
-                <iframe src="https://www.youtube.com/watch?v=UuCnb6zpdFg" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                <iframe src="https://www.youtube.com/embed/LIVE_STREAM_ID_HERE?autoplay=1&mute=1" allow="autoplay; encrypted-media" allowfullscreen></iframe>
               </div>
               <div class="live-clock" id="clock">00:00:00 AM</div>
               <div class="ticker-bar">
@@ -84,15 +83,18 @@ jobs:
         env:
           FB_KEY: ${{ secrets.FB_STREAM_KEY }}
         run: |
-          # 1. Virtual Screen (1280x720)
+          # 1. Local Server தொடங்குதல்
+          npx http-server -p 8000 &
+          sleep 3
+
+          # 2. Virtual Display அமைத்தல்
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Local Player HTML-ஐ Stealth Mode-இல் லோட் செய்தல்
+          # 3. Kiosk Mode மூலம் பிரவுசர் பார் இல்லாமல் லோட் செய்தல்
           node -e '
           const puppeteer = require("puppeteer-extra");
           const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-          const path = require("path");
           puppeteer.use(StealthPlugin());
 
           (async () => {
@@ -101,20 +103,21 @@ jobs:
               args: [
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
-                "--disable-blink-features=AutomationControlled",
+                "--kiosk",
+                "--disable-translate",
+                "--disable-features=Translate",
                 "--window-size=1280,720"
               ]
             });
             const page = await browser.newPage();
             await page.setViewport({ width: 1280, height: 720 });
-            const filePath = "file://" + path.resolve("player.html");
-            await page.goto(filePath, { waitUntil: "networkidle2" });
+            await page.goto("http://localhost:8000/index.html", { waitUntil: "networkidle2" });
           })();
           ' &
 
           sleep 15
 
-          # 3. Stream to Facebook Live (துல்லியமான 1280x720 Full Screen)
+          # 4. Stream to Facebook Live
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
           -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
