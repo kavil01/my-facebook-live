@@ -12,52 +12,37 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Python, Playwright & FFmpeg
+      - name: Install Stream Tools & Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg xvfb
-          python3 -m pip install --upgrade pip
-          pip install playwright playwright-stealth
-          playwright install chromium
-          playwright install-deps
+          sudo apt-get install -y ffmpeg xvfb chromium-browser xdotool python3-pip
+          pip3 install yt-dlp
 
       - name: Start Live Stream
         env:
           FB_KEY: ${{ secrets.FB_STREAM_KEY }}
         run: |
-          # 1. Virtual Screen (1280x720)
+          # 1. Virtual Screen அமைத்தல்
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Python Script மூலம் reCAPTCHA-வை தடுத்து Webpage திறத்தல்
-          python3 -c '
-          import time
-          from playwright.sync_api import sync_playwright
-          from playwright_stealth import stealth_sync
+          # 2. Chromium-ஐ Flags உடன் இயக்குதல் (Bypass Detection)
+          chromium-browser \
+            --no-sandbox \
+            --disable-setuid-sandbox \
+            --disable-dev-shm-usage \
+            --disable-accelerated-2d-canvas \
+            --disable-gpu \
+            --disable-blink-features=AutomationControlled \
+            --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
+            --window-size=1280,720 \
+            --start-fullscreen \
+            "https://newtamiil.blogspot.com/" &
 
-          with sync_playwright() as p:
-              browser = p.chromium.launch(
-                  headless=False,
-                  args=[
-                      "--no-sandbox",
-                      "--disable-setuid-sandbox",
-                      "--disable-blink-features=AutomationControlled",
-                      "--window-size=1280,720"
-                  ]
-              )
-              context = browser.new_context(
-                  viewport={"width": 1280, "height": 720},
-                  user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-              )
-              page = context.new_page()
-              stealth_sync(page)
-              page.goto("https://newtamiil.blogspot.com/", wait_until="networkidle", timeout=90000)
-              time.sleep(3000)
-          ' &
+          # பிரவுசர் லோட் ஆக 30 வினாடிகள் காத்திருத்தல்
+          sleep 30
 
-          sleep 25
-
-          # 3. துல்லியமான Crop மற்றும் Live Stream
+          # 3. FFmpeg Crop மற்றும் Facebook Live ஸ்ட்ரீமிங்
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
           -vf "crop=850:480:215:150,scale=1280:720" \
