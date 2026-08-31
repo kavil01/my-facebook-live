@@ -16,10 +16,17 @@ jobs:
         run: |
           sudo timedatectl set-timezone Asia/Colombo
 
-      - name: Install Stream Tools & Chromium
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Stream Tools & Puppeteer
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg xvfb chromium-browser
+          sudo apt-get install -y ffmpeg xvfb libgbm-dev
+          npm init -y
+          npm install puppeteer puppeteer-extra puppeteer-extra-plugin-stealth --unsafe-perm=true
 
       - name: Start Live Stream
         env:
@@ -30,24 +37,48 @@ jobs:
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Chromium-ஐ முழு திரையில் (Kiosk Mode) மற்றும் Bot Detection தடுத்து திறத்தல்
-          chromium-browser \
-            --no-sandbox \
-            --disable-setuid-sandbox \
-            --kiosk \
-            --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" \
-            --disable-blink-features=AutomationControlled \
-            --window-size=1280,720 \
-            --window-position=0,0 \
-            "https://newtamiil.blogspot.com/" &
+          # 2. Puppeteer Script: Automatic Accept & Fullscreen Player
+          node -e '
+          const puppeteer = require("puppeteer-extra");
+          const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+          puppeteer.use(StealthPlugin());
 
-          # வலைத்தளம் லோட் ஆக காத்திருத்தல்
-          sleep 20
+          (async () => {
+            const browser = await puppeteer.launch({
+              headless: false,
+              args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--autoplay-policy=no-user-gesture-required",
+                "--window-size=1280,720"
+              ]
+            });
 
-          # 3. Kiosk Mode-க்கு ஏற்ப துல்லியமாக Player பகுதி மட்டும் வெட்டப்பட்டு Stream செய்யப்படும்
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1280, height: 720 });
+            
+            // Go to Blogspot Site
+            await page.goto("https://newtamiil.blogspot.com/", { waitUntil: "networkidle2", timeout: 60000 });
+
+            // Handle Accept Dialog if present
+            try {
+              const acceptBtn = await page.$("button, input[type=button]");
+              if(acceptBtn) await acceptBtn.click();
+            } catch(e) {}
+
+            await new Promise(r => setTimeout(r, 10000));
+          })();
+          ' &
+
+          # லோடிங் நிறைவடைய காத்திருத்தல்
+          sleep 25
+
+          # 3. துல்லியமாக Yellow Box Player பகுதி மட்டும் Crop செய்யப்பட்டு ஸ்ட்ரீம் செய்யப்படும்
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
-          -vf "crop=1100:620:90:50,scale=1280:720" \
+          -vf "crop=1020:600:130:60,scale=1280:720" \
           -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
           -c:a aac -b:a 128k \
           -f flv "rtmps://live-api-s.facebook.com:443/rtmp/${FB_KEY}"
