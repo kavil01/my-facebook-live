@@ -26,11 +26,17 @@ jobs:
           FB_KEY: ${{ secrets.FB_STREAM_KEY }}
           TZ: "Asia/Colombo"
         run: |
+          # Stream Key உள்ளதா என சரிபார்த்தல்
+          if [ -z "$FB_KEY" ]; then
+            echo "Error: FB_STREAM_KEY is missing in GitHub Secrets!"
+            exit 1
+          fi
+
           # 1. Virtual Display (1280x720)
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Automation Flag இல்லாமல் Chromium-ஐ திறத்தல்
+          # 2. Chromium-ஐ திறத்தல்
           chromium-browser \
             --no-sandbox \
             --disable-setuid-sandbox \
@@ -43,13 +49,12 @@ jobs:
             --window-position=0,0 \
             "https://newtamiil.blogspot.com/" &
 
-          # பக்கம் முழுவதும் லோட் ஆக காத்திருத்தல்
           sleep 25
 
-          # 3. Player பகுதியை மட்டும் Crop செய்து 1280x720-இல் Facebook Live அனுப்பல்
+          # 3. FFmpeg மூலம் Facebook RTMPS-க்கு ஸ்ட்ரீமிங் செய்தல்
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
           -vf "crop=1020:600:130:60,scale=1280:720" \
           -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
           -c:a aac -b:a 128k \
-          -f flv "rtmps://live-api-s.facebook.com:443/rtmp/${FB_KEY}"
+          -f flv "rtmps://live-api-s.facebook.com:443/rtmp/$FB_KEY"
