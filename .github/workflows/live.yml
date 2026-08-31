@@ -28,11 +28,11 @@ jobs:
         env:
           FB_KEY: ${{ secrets.FB_STREAM_KEY }}
         run: |
-          # 1. Virtual Screen தொடங்குதல்
+          # 1. Virtual Screen
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Stealth Mode பயன்படுத்தி reCAPTCHA-வை தடுத்தல்
+          # 2. reCAPTCHA தடுக்கும் Stealth Mode பிரவுசர்
           node -e '
           const puppeteer = require("puppeteer-extra");
           const StealthPlugin = require("puppeteer-extra-plugin-stealth");
@@ -57,10 +57,10 @@ jobs:
 
           sleep 30
 
-          # 3. Stream to Facebook
+          # 3. துல்லியமான Crop மற்றும் Live Streaming
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
-          -vf "crop=1000:580:140:100,scale=1280:720" \
+          -vf "crop=850:480:215:150,scale=1280:720" \
           -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
           -c:a aac -b:a 128k \
           -f flv "rtmps://live-api-s.facebook.com:443/rtmp/${FB_KEY}"
