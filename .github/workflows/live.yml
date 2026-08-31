@@ -22,7 +22,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg xvfb libgbm-dev
           npm init -y
-          npm install puppeteer --unsafe-perm=true
+          npm install puppeteer puppeteer-extra puppeteer-extra-plugin-stealth --unsafe-perm=true
 
       - name: Start Live Stream
         env:
@@ -32,31 +32,32 @@ jobs:
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Puppeteer மூலம் வலைத்தளத்தை முழுமையாக லோட் செய்தல்
+          # 2. Stealth Mode பயன்படுத்தி reCAPTCHA-வை தடுத்தல்
           node -e '
-          const puppeteer = require("puppeteer");
+          const puppeteer = require("puppeteer-extra");
+          const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+          puppeteer.use(StealthPlugin());
+
           (async () => {
             const browser = await puppeteer.launch({
               headless: false,
               args: [
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
-                "--disable-infobars",
-                "--window-size=1280,720",
-                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                "--disable-blink-features=AutomationControlled",
+                "--window-size=1280,720"
               ]
             });
             const page = await browser.newPage();
             await page.setViewport({ width: 1280, height: 720 });
+            await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
             await page.goto("https://newtamiil.blogspot.com/", { waitUntil: "networkidle2", timeout: 90000 });
-            console.log("Website Fully Loaded!");
           })();
           ' &
 
-          # வலைத்தளம் மற்றும் வீடியோ லோட் ஆக 30 வினாடிகள் காத்திருத்தல்
           sleep 30
 
-          # 3. Player பகுதியை மட்டும் துல்லியமாக Crop செய்து Live அனுப்புதல்
+          # 3. Stream to Facebook
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
           -vf "crop=1000:580:140:100,scale=1280:720" \
