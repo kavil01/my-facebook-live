@@ -1,4 +1,4 @@
-name: Website 24/7 Facebook Live
+name: Website Player Only Facebook Live
 
 on:
   schedule:
@@ -15,7 +15,7 @@ jobs:
       - name: Install Node.js & Dependencies
         run: |
           npm init -y
-          npm install puppeteer
+          npm install puppeteer puppeteer-extra puppeteer-extra-plugin-stealth
 
       - name: Install FFmpeg & Chrome Dependencies
         run: |
@@ -29,23 +29,29 @@ jobs:
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
+          # YouTube Bot Check-ஐத் தவிர்க்க Stealth Plugin உடன் Web Page திறக்கிறது
           node -e '
-          const puppeteer = require("puppeteer");
+          const puppeteer = require("puppeteer-extra");
+          const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+          puppeteer.use(StealthPlugin());
+
           (async () => {
             const browser = await puppeteer.launch({
               headless: false,
               args: ["--no-sandbox", "--disable-setuid-sandbox", "--window-size=1280,720"]
             });
             const page = await browser.newPage();
+            await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             await page.setViewport({ width: 1280, height: 720 });
             await page.goto("https://newtamiil.blogspot.com/", { waitUntil: "networkidle2" });
-            console.log("Website Loaded Successfully!");
           })();
           ' &
 
-          sleep 10
+          sleep 15
 
+          # FFmpeg Crop: Video Player பகுதியை மட்டும் வெட்டி Full Screen-ஆக Facebook Live அனுப்பும்
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
+          -vf "crop=1020:600:130:90,scale=1280:720" \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
           -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
           -c:a aac -b:a 128k \
