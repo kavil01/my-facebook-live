@@ -21,19 +21,19 @@ jobs:
         env:
           FB_KEY: ${{ secrets.FB_STREAM_KEY }}
         run: |
-          # Virtual screen உருவாக்குதல்
+          # 1. Virtual Screen தொடங்குதல்
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # Chromium பிரவுசரில் வெப்சைட் திறத்தல்
+          # 2. Browser-இல் Webpage திறத்தல்
           chromium-browser --no-sandbox --disable-setuid-sandbox --window-size=1280,720 --start-fullscreen "https://newtamiil.blogspot.com/" &
 
           sleep 15
 
-          # Screen Capture செய்து Facebook Live அனுப்புதல்
+          # 3. FFmpeg Command (காரணம்: Filter மற்றும் Input ஆப்ஷன்கள் சரியான வரிசையில் வைக்கப்பட்டுள்ளன)
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
-          -vf "crop=1020:600:130:90,scale=1280:720" \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
+          -vf "crop=1020:600:130:90,scale=1280:720" \
           -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
           -c:a aac -b:a 128k \
           -f flv "rtmps://live-api-s.facebook.com:443/rtmp/${FB_KEY}"
