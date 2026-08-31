@@ -12,10 +12,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Stream Tools
+      - name: Install Stream Tools & Utilities
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg xvfb chromium-browser
+          sudo apt-get install -y ffmpeg xvfb chromium-browser xdotool
 
       - name: Start Live Stream
         env:
@@ -25,12 +25,26 @@ jobs:
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Browser-இல் Webpage திறத்தல்
-          chromium-browser --no-sandbox --disable-setuid-sandbox --window-size=1280,720 --start-fullscreen "https://newtamiil.blogspot.com/" &
+          # 2. Chromium பிரவுசரை திறத்தல்
+          chromium-browser \
+            --no-sandbox \
+            --disable-setuid-sandbox \
+            --no-first-run \
+            --no-default-browser-check \
+            --disable-fre \
+            --start-maximized \
+            "https://newtamiil.blogspot.com/" &
+
+          sleep 5
+
+          # 3. Pop-up வந்திருந்தால் அதைத் தானாக கிளிக் செய்து மூடுதல்
+          xdotool key Return
+          sleep 2
+          xdotool key Return
 
           sleep 15
 
-          # 3. FFmpeg Command (காரணம்: Filter மற்றும் Input ஆப்ஷன்கள் சரியான வரிசையில் வைக்கப்பட்டுள்ளன)
+          # 4. FFmpeg Crop மற்றும் Live Stream
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
           -vf "crop=1020:600:130:90,scale=1280:720" \
