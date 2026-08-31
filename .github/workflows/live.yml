@@ -1,277 +1,55 @@
-name: KING Tamil TV - Facebook Live
+name: Website Player Only Facebook Live
 
 on:
+  schedule:
+    - cron: '0 */5 * * *'
   workflow_dispatch:
 
 jobs:
-  tv-live:
+  stream-website:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
-
-    env:
-      TV_URL: "https://newtamiil.blogspot.com/?m=1"
-      DISPLAY: ":99"
-
     steps:
-      - name: Install Chrome, FFmpeg and X11
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Timezone to Sri Lanka
+        run: |
+          sudo timedatectl set-timezone Asia/Colombo
+
+      - name: Install Stream Tools & Chromium
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            chromium \
-            ffmpeg \
-            xvfb \
-            x11-utils \
-            pulseaudio \
-            pulseaudio-utils \
-            curl \
-            jq
-          chromium --version
-          ffmpeg -version | head -1
+          sudo apt-get install -y ffmpeg xvfb chromium-browser
 
-      - name: Start virtual display
-        run: |
-          Xvfb :99 -screen 0 1920x1080x24 -ac +extension RANDR > /tmp/xvfb.log 2>&1 &
-          echo $! > /tmp/xvfb.pid
-          sleep 3
-          export DISPLAY=:99
-          xdpyinfo -display :99 | grep dimensions
-
-      - name: Start audio system
-        run: |
-          export DISPLAY=:99
-          pulseaudio --start --exit-idle-time=-1 --daemonize=true
-          sleep 3
-          pactl load-module module-null-sink sink_name=TVSink sink_properties=device.description=TVSink || true
-          pactl set-default-sink TVSink
-          echo "Audio system ready."
-          pactl list short sinks
-
-      - name: Create TV browser controller & Install Playwright
-        run: |
-          cd /tmp
-          cat > tv-browser.js <<'EOF'
-          const { chromium } = require("playwright");
-          const URL = process.env.TV_URL;
-
-          async function startBrowser() {
-              console.log("Starting TV browser with Anti-Bot bypass...");
-              const browser = await chromium.launch({
-                  headless: false,
-                  executablePath: "/usr/bin/chromium",
-                  args: [
-                      "--no-sandbox",
-                      "--disable-setuid-sandbox",
-                      "--disable-dev-shm-usage",
-                      "--disable-gpu",
-                      "--disable-blink-features=AutomationControlled",
-                      "--autoplay-policy=no-user-gesture-required",
-                      "--disable-notifications",
-                      "--disable-popup-blocking",
-                      "--disable-infobars",
-                      "--hide-scrollbars",
-                      "--disable-translate",
-                      "--no-first-run",
-                      "--no-default-browser-check",
-                      "--window-size=1920,1080",
-                      "--start-maximized",
-                      "--start-fullscreen"
-                  ]
-              });
-
-              const context = await browser.newContext({
-                  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                  viewport: { width: 1920, height: 1080 },
-                  deviceScaleFactor: 1
-              });
-
-              const page = await context.newPage();
-              
-              // Remove navigator.webdriver flag to bypass bot checks
-              await page.addInitScript(() => {
-                  Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-              });
-
-              console.log("Opening:", URL);
-
-              await page.goto(URL, { waitUntil: "networkidle", timeout: 120000 });
-              console.log("Blogger loaded.");
-              await page.waitForTimeout(15000);
-
-              const result = await page.evaluate(() => {
-                  const selectors = [
-                      ".tv-main-wrapper",
-                      ".tv-player",
-                      "#tv-player",
-                      ".video-container",
-                      ".player-container",
-                      "iframe"
-                  ];
-
-                  let tv = null;
-                  for (const selector of selectors) {
-                      const element = document.querySelector(selector);
-                      if (element) {
-                          tv = element;
-                          console.log("TV found:", selector);
-                          break;
-                      }
-                  }
-
-                  if (!tv) {
-                      return { success: false, message: "TV player element not found." };
-                  }
-
-                  document.documentElement.style.margin = "0";
-                  document.documentElement.style.padding = "0";
-                  document.body.style.margin = "0";
-                  document.body.style.padding = "0";
-                  document.body.style.background = "#000";
-                  document.body.style.overflow = "hidden";
-
-                  Array.from(document.body.children).forEach(element => {
-                      if (element !== tv) {
-                          element.style.display = "none";
-                      }
-                  });
-
-                  tv.style.setProperty("position", "fixed", "important");
-                  tv.style.setProperty("left", "0", "important");
-                  tv.style.setProperty("top", "0", "important");
-                  tv.style.setProperty("width", "100vw", "important");
-                  tv.style.setProperty("height", "100vh", "important");
-                  tv.style.setProperty("max-width", "none", "important");
-                  tv.style.setProperty("margin", "0", "important");
-                  tv.style.setProperty("border-radius", "0", "important");
-                  tv.style.setProperty("overflow", "hidden", "important");
-                  tv.style.setProperty("display", "block", "important");
-
-                  tv.querySelectorAll("*").forEach(child => {
-                      child.style.visibility = "visible";
-                  });
-                  tv.style.visibility = "visible";
-
-                  return { success: true };
-              });
-
-              console.log(result);
-
-              await page.evaluate(() => {
-                  document.querySelectorAll("video").forEach(video => {
-                      video.muted = false;
-                      video.autoplay = true;
-                      const promise = video.play();
-                      if (promise) { promise.catch(() => {}); }
-                  });
-              });
-
-              await page.waitForTimeout(5000);
-              console.log("KING TAMIL TV is ready.");
-
-              while (true) {
-                  await page.waitForTimeout(10000);
-                  if (!page.url().includes("newtamiil.blogspot.com")) {
-                      console.log("Wrong page detected. Reloading TV.");
-                      await page.goto(URL, { waitUntil: "domcontentloaded", timeout: 120000 });
-                  }
-              }
-          }
-
-          startBrowser().catch(error => {
-              console.error(error);
-              process.exit(1);
-          });
-          EOF
-
-          npm init -y
-          npm install playwright
-
-      - name: Start TV
+      - name: Start Live Stream
         env:
-          DISPLAY: ":99"
-          TV_URL: ${{ env.TV_URL }}
+          FB_KEY: ${{ secrets.FB_STREAM_KEY }}
+          TZ: "Asia/Colombo"
         run: |
-          cd /tmp
-          NODE_PATH=/tmp/node_modules node tv-browser.js > /tmp/tv-browser.log 2>&1 &
-          echo $! > /tmp/tv-browser.pid
-          echo "Waiting for TV..."
+          # 1. Virtual Display (1280x720)
+          Xvfb :99 -screen 0 1280x720x24 &
+          export DISPLAY=:99
+
+          # 2. Automation Flag இல்லாமல் Chromium-ஐ திறத்தல்
+          chromium-browser \
+            --no-sandbox \
+            --disable-setuid-sandbox \
+            --disable-blink-features=AutomationControlled \
+            --disable-infobars \
+            --excludeSwitches="enable-automation" \
+            --useAutomationExtension=false \
+            --kiosk \
+            --window-size=1280,720 \
+            --window-position=0,0 \
+            "https://newtamiil.blogspot.com/" &
+
+          # பக்கம் முழுவதும் லோட் ஆக காத்திருத்தல்
           sleep 25
-          cat /tmp/tv-browser.log || true
 
-      - name: Check TV screen
-        run: |
-          echo "=============================="
-          echo "DISPLAY"
-          echo "=============================="
-          xdpyinfo -display :99 | grep dimensions || true
-
-          echo "=============================="
-          echo "CHROMIUM"
-          echo "=============================="
-          ps aux | grep chromium | grep -v grep || true
-
-          echo "=============================="
-          echo "TV BROWSER LOG"
-          echo "=============================="
-          cat /tmp/tv-browser.log || true
-
-      - name: Start Facebook Live
-        env:
-          FACEBOOK_RTMP_URL: ${{ secrets.FACEBOOK_RTMP_URL }}
-          FACEBOOK_STREAM_KEY: ${{ secrets.FACEBOOK_STREAM_KEY }}
-          DISPLAY: ":99"
-        run: |
-          if [ -z "$FACEBOOK_RTMP_URL" ]; then
-            echo "ERROR: FACEBOOK_RTMP_URL secret missing."
-            exit 1
-          fi
-
-          if [ -z "$FACEBOOK_STREAM_KEY" ]; then
-            echo "ERROR: FACEBOOK_STREAM_KEY secret missing."
-            exit 1
-          fi
-
-          echo "================================"
-          echo "KING TAMIL TV"
-          echo "Facebook Live starting..."
-          echo "================================"
-
-          ffmpeg \
-            -hide_banner \
-            -loglevel info \
-            -f x11grab \
-            -draw_mouse 0 \
-            -video_size 1920x1080 \
-            -framerate 30 \
-            -i :99.0 \
-            -f pulse \
-            -i default \
-            -vf "format=yuv420p" \
-            -c:v libx264 \
-            -preset veryfast \
-            -tune zerolatency \
-            -pix_fmt yuv420p \
-            -r 30 \
-            -g 60 \
-            -keyint_min 60 \
-            -sc_threshold 0 \
-            -b:v 4500k \
-            -maxrate 4500k \
-            -bufsize 9000k \
-            -c:a aac \
-            -b:a 128k \
-            -ar 44100 \
-            -ac 2 \
-            -f flv \
-            "${FACEBOOK_RTMP_URL}${FACEBOOK_STREAM_KEY}"
-
-      - name: Cleanup
-        if: always()
-        run: |
-          echo "Cleaning up..."
-          pkill ffmpeg || true
-          pkill chromium || true
-          pkill node || true
-          if [ -f /tmp/xvfb.pid ]; then
-              kill "$(cat /tmp/xvfb.pid)" 2>/dev/null || true
-          fi
-          echo "Cleanup completed."
+          # 3. Player பகுதியை மட்டும் Crop செய்து 1280x720-இல் Facebook Live அனுப்பல்
+          ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
+          -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
+          -vf "crop=1020:600:130:60,scale=1280:720" \
+          -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
+          -c:a aac -b:a 128k \
+          -f flv "rtmps://live-api-s.facebook.com:443/rtmp/${FB_KEY}"
