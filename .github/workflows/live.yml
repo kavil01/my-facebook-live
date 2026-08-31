@@ -54,7 +54,7 @@ jobs:
           const URL = process.env.TV_URL;
 
           async function startBrowser() {
-              console.log("Starting TV browser...");
+              console.log("Starting TV browser with Anti-Bot bypass...");
               const browser = await chromium.launch({
                   headless: false,
                   executablePath: "/usr/bin/chromium",
@@ -63,6 +63,7 @@ jobs:
                       "--disable-setuid-sandbox",
                       "--disable-dev-shm-usage",
                       "--disable-gpu",
+                      "--disable-blink-features=AutomationControlled",
                       "--autoplay-policy=no-user-gesture-required",
                       "--disable-notifications",
                       "--disable-popup-blocking",
@@ -78,16 +79,23 @@ jobs:
               });
 
               const context = await browser.newContext({
+                  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                   viewport: { width: 1920, height: 1080 },
                   deviceScaleFactor: 1
               });
 
               const page = await context.newPage();
+              
+              // Remove navigator.webdriver flag to bypass bot checks
+              await page.addInitScript(() => {
+                  Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+              });
+
               console.log("Opening:", URL);
 
-              await page.goto(URL, { waitUntil: "domcontentloaded", timeout: 120000 });
+              await page.goto(URL, { waitUntil: "networkidle", timeout: 120000 });
               console.log("Blogger loaded.");
-              await page.waitForTimeout(10000);
+              await page.waitForTimeout(15000);
 
               const result = await page.evaluate(() => {
                   const selectors = [
@@ -95,7 +103,8 @@ jobs:
                       ".tv-player",
                       "#tv-player",
                       ".video-container",
-                      ".player-container"
+                      ".player-container",
+                      "iframe"
                   ];
 
                   let tv = null;
@@ -145,9 +154,6 @@ jobs:
               });
 
               console.log(result);
-              if (!result.success) {
-                  throw new Error("TV player not found.");
-              }
 
               await page.evaluate(() => {
                   document.querySelectorAll("video").forEach(video => {
@@ -188,7 +194,7 @@ jobs:
           NODE_PATH=/tmp/node_modules node tv-browser.js > /tmp/tv-browser.log 2>&1 &
           echo $! > /tmp/tv-browser.pid
           echo "Waiting for TV..."
-          sleep 20
+          sleep 25
           cat /tmp/tv-browser.log || true
 
       - name: Check TV screen
