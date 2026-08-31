@@ -37,7 +37,7 @@ jobs:
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Puppeteer Script: Automatic Accept & Fullscreen Player
+          # 2. Advanced Bot Bypass Puppeteer Script
           node -e '
           const puppeteer = require("puppeteer-extra");
           const StealthPlugin = require("puppeteer-extra-plugin-stealth");
@@ -46,39 +46,36 @@ jobs:
           (async () => {
             const browser = await puppeteer.launch({
               headless: false,
+              executablePath: "/usr/bin/google-chrome",
               args: [
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
-                "--no-first-run",
-                "--no-default-browser-check",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-web-security",
+                "--allow-running-insecure-content",
                 "--autoplay-policy=no-user-gesture-required",
                 "--window-size=1280,720"
               ]
             });
 
             const page = await browser.newPage();
-            await page.setViewport({ width: 1280, height: 720 });
             
-            // Go to Blogspot Site
-            await page.goto("https://newtamiil.blogspot.com/", { waitUntil: "networkidle2", timeout: 60000 });
-
-            // Handle Accept Dialog if present
-            try {
-              const acceptBtn = await page.$("button, input[type=button]");
-              if(acceptBtn) await acceptBtn.click();
-            } catch(e) {}
-
-            await new Promise(r => setTimeout(r, 10000));
+            // Custom Headers to bypass Bot Detection
+            await page.setExtraHTTPHeaders({
+              "accept-language": "en-US,en;q=0.9,ta;q=0.8"
+            });
+            
+            await page.setViewport({ width: 1280, height: 720 });
+            await page.goto("https://newtamiil.blogspot.com/", { waitUntil: "networkidle2", timeout: 90000 });
           })();
           ' &
 
-          # லோடிங் நிறைவடைய காத்திருத்தல்
           sleep 25
 
-          # 3. துல்லியமாக Yellow Box Player பகுதி மட்டும் Crop செய்யப்பட்டு ஸ்ட்ரீம் செய்யப்படும்
+          # 3. Stream to Facebook Live (உங்களின் தற்போதைய Crop Alignment-க்கு ஏற்றவாறு)
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
-          -vf "crop=1020:600:130:60,scale=1280:720" \
+          -vf "crop=1100:620:90:50,scale=1280:720" \
           -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -b:v 2500k \
           -c:a aac -b:a 128k \
           -f flv "rtmps://live-api-s.facebook.com:443/rtmp/${FB_KEY}"
