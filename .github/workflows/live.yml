@@ -26,7 +26,6 @@ jobs:
           FB_KEY: ${{ secrets.FB_STREAM_KEY }}
           TZ: "Asia/Colombo"
         run: |
-          # Stream Key உள்ளதா என சரிபார்த்தல்
           if [ -z "$FB_KEY" ]; then
             echo "Error: FB_STREAM_KEY is missing in GitHub Secrets!"
             exit 1
@@ -36,10 +35,12 @@ jobs:
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Chromium-ஐ திறத்தல்
+          # 2. First Run Dialog-ஐ தடுத்து Chromium திறத்தல்
           chromium-browser \
             --no-sandbox \
             --disable-setuid-sandbox \
+            --no-first-run \
+            --no-default-browser-check \
             --disable-blink-features=AutomationControlled \
             --disable-infobars \
             --excludeSwitches="enable-automation" \
@@ -51,7 +52,7 @@ jobs:
 
           sleep 25
 
-          # 3. FFmpeg மூலம் Facebook RTMPS-க்கு ஸ்ட்ரீமிங் செய்தல்
+          # 3. FFmpeg Stream
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
           -vf "crop=1020:600:130:60,scale=1280:720" \
