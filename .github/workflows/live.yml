@@ -12,30 +12,25 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Dependencies & Chrome
+      - name: Install Stream Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg xvfb wget gnupg
-          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
+          sudo apt-get install -y ffmpeg xvfb chromium-browser
 
       - name: Start Live Stream
         env:
           FB_KEY: ${{ secrets.FB_STREAM_KEY }}
         run: |
-          # 1. Virtual Display தொடங்குதல்
+          # Virtual screen உருவாக்குதல்
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
 
-          # 2. Chrome பிரவுசரில் உங்கள் இணையதளத்தைத் திறத்தல்
-          google-chrome-stable --no-sandbox --disable-setuid-sandbox --window-size=1280,720 --start-fullscreen "https://newtamiil.blogspot.com/" &
+          # Chromium பிரவுசரில் வெப்சைட் திறத்தல்
+          chromium-browser --no-sandbox --disable-setuid-sandbox --window-size=1280,720 --start-fullscreen "https://newtamiil.blogspot.com/" &
 
-          # பிரவுசர் முழுமையாக லோட் ஆக 20 வினாடிகள் காத்திருத்தல்
-          sleep 20
+          sleep 15
 
-          # 3. FFmpeg மூலம் பிளேயர் பகுதியை மட்டும் Crop செய்து Facebook-க்கு அனுப்புதல்
+          # Screen Capture செய்து Facebook Live அனுப்புதல்
           ffmpeg -f x11grab -r 30 -s 1280x720 -i :99.0 \
           -vf "crop=1020:600:130:90,scale=1280:720" \
           -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
